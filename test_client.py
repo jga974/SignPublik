@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 import base64
 import os
 
-from hello_test import app
+from app.hello_test import app
 
 client = TestClient(app)
 TEST_API_KEY = os.getenv("API_KEY", "CORSICA_pdf-sign2025")
