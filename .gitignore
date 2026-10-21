@@ -63,3 +63,7 @@ Thumbs.db
 
 # Fichiers de test versionnés
 !tests/fixtures/*.pdf
+!tests/fixtures/*.png
+# certificat/clé de TEST uniquement (auto-signés, sans valeur)
+!tests/fixtures/cert.pem
+!tests/fixtures/private_key.pem
