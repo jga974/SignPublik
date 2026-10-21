@@ -89,15 +89,33 @@ def test_PDFSign(save_signed):
     print(f"taille du fichier : {len(pdf_data)}")
     # Encoder le contenu en base64
     base64_encoded = base64.b64encode(pdf_data).decode("utf-8")
+    fichier = {
+        "filename": "fichier_demande-testeur-avelin.pdf",
+        "content": base64_encoded
+    }
+
+    # 1. on cherche l'ancre : page et position du texte « Assistant »
+    info = client.post("/getInfo-PDF", headers=headers,
+                       json={"fichier": fichier, "recherche": "Assistant"})
+    assert info.status_code == 200
+    info = info.json()
+    assert info["signature_page"] == 2
+    x1 = float(info["signature_coords"]["x1"])
+    y1 = float(info["signature_coords"]["y1"])      # repère haut-gauche
+    hauteur_page = int(info["pagesize"]["height"])
+
+    # 2. la boîte de signature est en repère PDF (origine en bas à gauche) :
+    #    200 x 100 points, 20 points sous l'ancre
+    box = (int(x1), int(hauteur_page - y1 - 120), int(x1) + 200, int(hauteur_page - y1 - 20))
+    print(f"ancre en ({x1:.0f}, {y1:.0f}) page {info['signature_page']}, boîte de signature {box}")
+
+    # 3. on signe à cet endroit
     payload = {
-        "page": 2,
+        "page": info["signature_page"],
         "ocrlayer": False,
         "protect": False,
-        "signature_box" : "351, 121, 551, 221",
-        "filedef1": {
-            "filename": "fichier_demande-testeur-avelin.pdf",
-            "content": base64_encoded
-        }
+        "signature_box": ", ".join(map(str, box)),
+        "filedef1": fichier
     }
 
     response = client.post(url = "/sign-basePDF64/", json=payload,  headers=headers)
