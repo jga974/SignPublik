@@ -122,3 +122,51 @@ def test_griffe_manuscrite_nom_relatif_place_dans_sign_path(tmp_path, monkeypatc
     res = iu.creer_image_texte_manuscrit_avance("Jean", (100, 80), nom_fichier="rel.png")
     assert res == str(tmp_path / "rel.png")
     assert (tmp_path / "rel.png").exists()
+
+
+# ---------- /read-rib ----------
+
+def rib_pdf(*lignes: str) -> bytes:
+    import pymupdf
+    doc = pymupdf.open()
+    page = doc.new_page()
+    for i, ligne in enumerate(lignes):
+        page.insert_text((72, 100 + 20 * i), ligne, fontsize=11)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def lire_rib(client, headers, pdf: bytes):
+    return client.post("/read-rib", headers=headers,
+                       json={"fichier": {"filename": "rib.pdf", "content": b64(pdf)}})
+
+
+def test_rib_complet(client, headers):
+    r = lire_rib(client, headers, rib_pdf("IBAN FR76 3000 3004 1700 0560 7498 316", "BIC SOGEFRPP"))
+    assert r.status_code == 200
+    assert r.json() == {
+        "iban": "FR7630003004170005607498316",
+        "bic": "SOGEFRPP",
+        "rib": {"code_banque": "30003", "code_guichet": "00417",
+                "num_compte": "00056074983", "cle_rib": "16"},
+    }
+
+
+def test_rib_sans_bic(client, headers):
+    """Un RIB sans BIC ne doit pas faire planter la route : bic vaut null."""
+    r = lire_rib(client, headers, rib_pdf("IBAN FR76 3000 3004 1700 0560 7498 316"))
+    assert r.status_code == 200
+    assert r.json()["iban"] == "FR7630003004170005607498316"
+    assert r.json()["bic"] is None
+
+
+def test_rib_sans_iban(client, headers):
+    r = lire_rib(client, headers, rib_pdf("Pas de coordonnées bancaires ici"))
+    assert r.status_code == 200
+    assert r.json() is None
+
+
+def test_rib_sans_cle_api(client):
+    r = client.post("/read-rib", json={"fichier": {"filename": "r.pdf", "content": ""}})
+    assert r.status_code == 422

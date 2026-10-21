@@ -5,17 +5,37 @@ import pytest
 from fastapi.testclient import TestClient
 
 import base64
-import os
+from pathlib import Path
 
+import shutil
+
+from app.config import API_KEY as TEST_API_KEY
 from app.hello_test import app
+from tests.conftest import sans_horodatage
 
 client = TestClient(app)
-TEST_API_KEY = os.getenv("API_KEY", "CORSICA_pdf-sign2025")
+
+# Fichiers d'exemple versionnés (indépendant du répertoire de lancement)
+FIXTURES = Path(__file__).parent / "tests" / "fixtures"
+
+
+@pytest.fixture(autouse=True)
+def signature_de_test(tmp_path, monkeypatch):
+    """Signe avec le certificat et la griffe de tests/fixtures, sans réseau."""
+    import app.hello_test as api
+    import app.core.signature as sig
+    shutil.copy(FIXTURES / "signature_signe_noBG.png", tmp_path)
+    monkeypatch.setattr(api, "SIGN_PATH", str(tmp_path))
+    monkeypatch.setattr(sig, "SIGN_PATH", str(tmp_path))
+    monkeypatch.setattr(sig, "DEFAULT_CERT_FILE", str(FIXTURES / "cert.pem"))
+    monkeypatch.setattr(sig, "DEFAULT_KEY_FILE", str(FIXTURES / "private_key.pem"))
+    sans_horodatage(monkeypatch)
+
 
 def test_PDFInfo():
     headers = {"api-key": TEST_API_KEY}
 
-    with open("fichier_demande-testeur-avelin.pdf", "rb") as pdf_file:
+    with open(FIXTURES / "fichier_demande-testeur-avelin.pdf", "rb") as pdf_file:
         pdf_data = pdf_file.read()
 
     # Encoder le contenu en base64
@@ -64,7 +84,7 @@ def test_DOCXInfo():
 def test_PDFSign():
     headers = {"api-key": TEST_API_KEY}
 
-    with open("fichier_demande-testeur-avelin.pdf", "rb") as pdf_file:
+    with open(FIXTURES / "fichier_demande-testeur-avelin.pdf", "rb") as pdf_file:
         pdf_data = pdf_file.read()
     print(f"taille du fichier : {len(pdf_data)}")
     # Encoder le contenu en base64
@@ -115,7 +135,7 @@ def test_IMGInfo():
     headers = {"api-key": TEST_API_KEY}
 
     # Lire le fichier PNG en mode binaire
-    with open("signature_signe_noBG.png", "rb") as png_file:
+    with open(FIXTURES / "signature_signe_noBG.png", "rb") as png_file:
             png_data = png_file.read()
 
     # Encoder les données en base64
@@ -139,7 +159,7 @@ def test_RIBlecture():
     headers = {"api-key": TEST_API_KEY}
 
     # Lire le fichier PNG en mode binaire
-    with open("rib.pdf", "rb") as pdf_file:
+    with open(FIXTURES / "rib.pdf", "rb") as pdf_file:
             pdf_data = pdf_file.read()
 
     # Encoder les données en base64

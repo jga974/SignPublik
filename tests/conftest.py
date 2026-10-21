@@ -64,6 +64,19 @@ def b64(data: bytes) -> str:
     return base64.b64encode(data).decode()
 
 
+def sans_horodatage(monkeypatch):
+    """Désactive l'horodatage freetsa.org (réseau) pendant les tests."""
+    import app.core.signature as sig
+
+    real_sign = sig.pdf.cms.sign
+
+    def sign_sans_tsa(data, udct, *args, **kwargs):
+        udct = {k: v for k, v in udct.items() if not k.startswith("timestamp")}
+        return real_sign(data, udct, *args, **kwargs)
+
+    monkeypatch.setattr(sig.pdf.cms, "sign", sign_sans_tsa)
+
+
 @pytest.fixture
 def sign_env(tmp_path, monkeypatch):
     """Isole la signature : répertoire de signatures, certificat et horodatage factices.
@@ -86,13 +99,7 @@ def sign_env(tmp_path, monkeypatch):
     monkeypatch.setattr(sig, "SIGN_PATH", str(tmp_path))
     monkeypatch.setattr(imgutils, "SIGN_PATH", str(tmp_path))
 
-    real_sign = sig.pdf.cms.sign
-
-    def sign_sans_tsa(data, udct, *args, **kwargs):
-        udct = {k: v for k, v in udct.items() if not k.startswith("timestamp")}
-        return real_sign(data, udct, *args, **kwargs)
-
-    monkeypatch.setattr(sig.pdf.cms, "sign", sign_sans_tsa)
+    sans_horodatage(monkeypatch)
     return tmp_path
 
 
