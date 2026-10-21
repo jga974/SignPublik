@@ -81,7 +81,7 @@ def test_DOCXInfo():
     assert int(float(response.json()['signature_coords']['x1'])) == 70;
 
 
-def test_PDFSign():
+def test_PDFSign(save_signed):
     headers = {"api-key": TEST_API_KEY}
 
     with open(FIXTURES / "fichier_demande-testeur-avelin.pdf", "rb") as pdf_file:
@@ -103,7 +103,10 @@ def test_PDFSign():
     response = client.post(url = "/sign-basePDF64/", json=payload,  headers=headers)
     #print(response.json())
     assert response.status_code == 200
-    print( response.headers['content-type'] == 'application/pdf')
+    assert response.headers['content-type'] == 'application/pdf'
+    assert response.content.startswith(pdf_data), "le PDF d'origine doit être conservé"
+    # pytest test_client.py::test_PDFSign -s --save-signed ./pdf_signes
+    save_signed("signed_fichier_demande-testeur-avelin.pdf", response.content)
 
 # Le signataire
 @pytest.mark.skipif( 1 == 1 , reason="trop lourd a tester l  signature")
