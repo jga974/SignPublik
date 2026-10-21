@@ -6,16 +6,20 @@ from fastapi.testclient import TestClient
 
 import base64
 import os
+from pathlib import Path
 
 from app.hello_test import app
 
 client = TestClient(app)
 TEST_API_KEY = os.getenv("API_KEY", "CORSICA_pdf-sign2025")
 
+# Fichiers d'exemple versionnés (indépendant du répertoire de lancement)
+FIXTURES = Path(__file__).parent / "tests" / "fixtures"
+
 def test_PDFInfo():
     headers = {"api-key": TEST_API_KEY}
 
-    with open("fichier_demande-testeur-avelin.pdf", "rb") as pdf_file:
+    with open(FIXTURES / "fichier_demande-testeur-avelin.pdf", "rb") as pdf_file:
         pdf_data = pdf_file.read()
 
     # Encoder le contenu en base64
@@ -64,7 +68,7 @@ def test_DOCXInfo():
 def test_PDFSign():
     headers = {"api-key": TEST_API_KEY}
 
-    with open("fichier_demande-testeur-avelin.pdf", "rb") as pdf_file:
+    with open(FIXTURES / "fichier_demande-testeur-avelin.pdf", "rb") as pdf_file:
         pdf_data = pdf_file.read()
     print(f"taille du fichier : {len(pdf_data)}")
     # Encoder le contenu en base64

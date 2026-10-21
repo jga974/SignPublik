@@ -60,3 +60,6 @@ env/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Fichiers de test versionnés
+!tests/fixtures/*.pdf
