@@ -73,6 +73,7 @@ def sign_env(tmp_path, monkeypatch):
     """
     import app.hello_test as api
     import app.core.signature as sig
+    import app.core.ImageUtils as imgutils
 
     cert_pem, key_pem = make_cert()
     (tmp_path / "cert.pem").write_bytes(cert_pem)
@@ -83,6 +84,7 @@ def sign_env(tmp_path, monkeypatch):
     monkeypatch.setattr(sig, "DEFAULT_KEY_FILE", str(tmp_path / "private_key.pem"))
     monkeypatch.setattr(api, "SIGN_PATH", str(tmp_path))
     monkeypatch.setattr(sig, "SIGN_PATH", str(tmp_path))
+    monkeypatch.setattr(imgutils, "SIGN_PATH", str(tmp_path))
 
     real_sign = sig.pdf.cms.sign
 
