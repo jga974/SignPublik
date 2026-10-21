@@ -1,0 +1,52 @@
+Installez les paquets nécessaires :
+bash
+sudo dnf install httpd python38
+pip3.8 install "fastapi[all]" uvicorn
+Créez votre application FastAPI dans un répertoire, par exemple /www/api/fastapi_server/main.py.
+Configurez un service systemd pour exécuter votre application FastAPI :
+bash
+sudo vi /etc/systemd/system/fastapi.service
+Ajoutez le contenu suivant :
+
+[Unit]
+Description=FastAPI application
+After=network.target
+
+[Service]
+User=apache
+WorkingDirectory=/opt/flask
+ExecStart=/opt/flask/env/bin/uvicorn hello_test:app --host 0.0.0.0 --port 8000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
+
+Activez et démarrez le service FastAPI :
+bash
+sudo systemctl enable --now fastapi
+Configurez Apache pour faire un proxy vers votre application FastAPI :
+
+Ajoutez le contenu suivant :
+text
+
+    ProxyPass /api/ http://localhost:8000/
+    ProxyPassReverse /api/ http://localhost:8000/
+
+Activez les modules proxy nécessaires :
+
+sudo sed -i 's/^#LoadModule proxy_module/LoadModule proxy_module/' /etc/httpd/conf.modules.d/00-proxy.conf
+sudo sed -i 's/^#LoadModule proxy_http_module/LoadModule proxy_http_module/' /etc/httpd/conf.modules.d/00-proxy.conf
+Redémarrez Apache :
+bash
+sudo systemctl restart httpd
+
+
+EN CAS de MODIF du PROGRAMME :
+
+systemctl restart fastapi
+
+Pour TESTER
+source env/bin/activate
+systemctl stop fastapi
+python hello_test.py

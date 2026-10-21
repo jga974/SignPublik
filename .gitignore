@@ -1,0 +1,62 @@
+# Fichiers de configuration & secrets
+.env
+.env.*
+!.env.example
+
+# Clés cryptographiques, certificats et signatures
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+ssl/
+private_key.pem
+cert.pem
+
+# Signatures et données personnelles (RGPD)
+signature_files/*
+!signature_files/.gitkeep
+*.png
+!logo.png
+!app/core/fonts/*
+
+# Documents traités, archives et fichiers temporaires
+*.pdf
+*.tar
+*.gz
+*.zip
+TEMP_*
+*.docx
+mm
+
+# Profils applicatifs et logs
+.config/
+*.log
+app.log
+
+# Sauvegardes et fichiers temporaires de dev
+*.OLD
+*.DEBUG
+*.OK.*
+*.bak
+*.swp
+
+# Caches Python & tests
+__pycache__/
+*/__pycache__/
+*/*/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.cache/
+
+# Environnements virtuels
+venv/
+env/
+.venv/
+
+# Éditeurs et OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
