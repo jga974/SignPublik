@@ -18,8 +18,6 @@ def test_image_size(client):
     assert r.json() == {"width": 113, "height": 85, "save": False}
 
 
-@pytest.mark.xfail(strict=True, reason="hello_test.py : `app` y désigne l'instance FastAPI, donc "
-                   "`app.core.utilities.storeImage` lève AttributeError (400) quand store=true")
 def test_image_size_avec_stockage(client, tmp_path, monkeypatch):
     import app.core.constants as constants
     monkeypatch.setattr(constants, "SIGN_PATH", str(tmp_path))

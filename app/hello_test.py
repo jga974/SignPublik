@@ -13,7 +13,7 @@ import base64
 from .core.ImageUtils import creer_image_texte_manuscrit_avance
 from .core.utilities import file_chunk_generator
 from .core.logger import logger
-from .core.utilities import get_image_size_in_points, slugify
+from .core.utilities import get_image_size_in_points, slugify, storeImage
 from app.core.signature import sign_pdf_content
 from .core.conversion import convert_to, get_pdf_content
 from .core.rib import extract_text_from_pdf_stream, extract_ibans, parse_french_rib
@@ -63,7 +63,7 @@ async def get_image_size_and_store(request:  ImageRequest ): # = File(...)):
         save_result_filename = False
         # selon le parametre, on peut sauvegarder dans un chemon spécifique
         if request.store :
-            save_result_filename = app.core.utilities.storeImage(request.image.content, request.image.filename)
+            save_result_filename = storeImage(request.image.content, request.image.filename)
 
         return {
             "width": width,
