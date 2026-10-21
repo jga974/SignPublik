@@ -251,7 +251,7 @@ async def get_rib_information(request: SimplePDFPublik):
     resultats = []
     for iban in ibans:
         rib = parse_french_rib(iban) if iban.startswith('FR') else None
-        bic = bics[0]
+        bic = bics[0] if bics else None
         #print(f"{iban} -> RIB  : {rib['code_guichet']} {rib['code_banque']}")
         resultats.append({'iban': iban, 'rib': rib, 'bic': bic})
     # on envoie que la premiere ligne
