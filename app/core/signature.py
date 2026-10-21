@@ -48,8 +48,8 @@ def sign_pdf_content(pdf_content, signature_box, page,
             cert_file = get_cert_name(mail_signer)
             key_file = get_key_name(mail_signer)
         else :
-            cert_file = "cert.pem"
-            key_file = "private_key.pem"
+            cert_file = DEFAULT_CERT_FILE
+            key_file = DEFAULT_KEY_FILE
 
         logo_path = "logo.png",
         logger.info(f"On demande {signature_box} et page {page} et taille {len(pdf_content)} et image {file_signature_img}")

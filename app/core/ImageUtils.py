@@ -1,7 +1,7 @@
 from PIL import Image, ImageDraw, ImageFont
 
 from app.core.logger import logger
-from app.core.constants import SIGN_PATH
+from app.core.constants import SIGN_PATH, FONTS_DIR
 import os
 
 def creer_signature_png_transparente(texte=None, image_source=None,
@@ -73,9 +73,9 @@ def creer_signature_png_transparente(texte=None, image_source=None,
     font = None
     try:
         # Essayer de charger une police manuscrite si disponible
-        font = ImageFont.truetype("core/fonts/BonheurRoyale-Regular.ttf", taille_police)
+        font = ImageFont.truetype(os.path.join(FONTS_DIR, "BonheurRoyale-Regular.ttf"), taille_police)
     except IOError:
-        print("on ne trouve pas la font core/fonts/BonheurRoyale-Regular.ttf")
+        print("on ne trouve pas la font BonheurRoyale-Regular.ttf dans", FONTS_DIR)
 
 
     #family, style = font.getname()
@@ -86,9 +86,9 @@ def creer_signature_png_transparente(texte=None, image_source=None,
     if font is None :
         try:
             # Essayer de charger une police manuscrite si disponible
-            font = ImageFont.truetype("app/core/fonts/BonheurRoyale-Regular.ttf", taille_police)
+            font = ImageFont.truetype(os.path.join(FONTS_DIR, "BonheurRoyale-Regular.ttf"), taille_police)
         except IOError:
-            print("on ne trouve pas la font app/core/fonts/BonheurRoyale-Regular.ttf")
+            print("on ne trouve pas la font BonheurRoyale-Regular.ttf dans", FONTS_DIR)
             font = ImageFont.load_default()
 
     family, style = font.getname()
@@ -239,9 +239,9 @@ def creer_image_texte_manuscrit_avance(texte, taille_image, nom_fichier="texte_m
 
     # Gestion des polices avec tailles adaptatives
     polices_manuscrites = [
-        "app/core/fonts/bradley-hand-itc-tt-bold.ttf",
-        "app/core/fonts/BonheurRoyale-Regular.ttf",
-        "app/core/fonts/Jennifer Lynne Bold.ttf",
+        os.path.join(FONTS_DIR, "bradley-hand-itc-tt-bold.ttf"),
+        os.path.join(FONTS_DIR, "BonheurRoyale-Regular.ttf"),
+        os.path.join(FONTS_DIR, "Jennifer Lynne Bold.ttf"),
         "/System/Library/Fonts/Chalkduster.ttf",
         "/System/Library/Fonts/Bradley Hand Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
@@ -265,7 +265,7 @@ def creer_image_texte_manuscrit_avance(texte, taille_image, nom_fichier="texte_m
         return width, height
 
     for font_size in range(max_font_size, min_font_size - 1, -1):
-        font = ImageFont.truetype("app/core/fonts/bradley-hand-itc-tt-bold.ttf", font_size)
+        font = ImageFont.truetype(os.path.join(FONTS_DIR, "bradley-hand-itc-tt-bold.ttf"), font_size)
         text_width, text_height = get_text_size(texte, font)
         if text_width <= largeur and text_height <= hauteur:
             break
@@ -316,7 +316,7 @@ def creer_image_texte_manuscrit_avance(texte, taille_image, nom_fichier="texte_m
     taille_police = 10
     logger.info("police deja vu")
     # Localiser la police DejaVuSans
-    font_path = "app/core/fonts/DejaVuSans.ttf"
+    font_path = os.path.join(FONTS_DIR, "DejaVuSans.ttf")
     police = ImageFont.truetype(font_path, taille_police)
     logger.info("police deja vu OK taille :" + str(taille_police))
     if horodatage != '' :
