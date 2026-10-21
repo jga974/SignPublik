@@ -1,7 +1,6 @@
 """Fixtures de test : tout est généré à la volée, aucun fichier réel n'est requis."""
 import base64
 import datetime
-from pathlib import Path
 
 import pymupdf
 import pytest
@@ -69,8 +68,7 @@ def b64(data: bytes) -> str:
 def sign_env(tmp_path, monkeypatch):
     """Isole la signature : répertoire de signatures, certificat et horodatage factices.
 
-    - `cert.pem` / `private_key.pem` sont cherchés dans le répertoire courant ;
-    - SIGN_PATH est lu au chargement des modules, on le redirige vers tmp_path ;
+    - le certificat par défaut et SIGN_PATH sont redirigés vers tmp_path ;
     - l'horodatage freetsa.org (réseau) est désactivé.
     """
     import app.hello_test as api
@@ -81,10 +79,8 @@ def sign_env(tmp_path, monkeypatch):
     (tmp_path / "private_key.pem").write_bytes(key_pem)
     make_griffe_png(tmp_path / "signature_signe_noBG.png")
 
-    # Le code charge polices et certificats par chemin relatif ("app/core/fonts/...",
-    # "cert.pem") : on travaille dans tmp_path en y exposant le dossier app/.
-    (tmp_path / "app").symlink_to(Path(api.__file__).parent, target_is_directory=True)
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sig, "DEFAULT_CERT_FILE", str(tmp_path / "cert.pem"))
+    monkeypatch.setattr(sig, "DEFAULT_KEY_FILE", str(tmp_path / "private_key.pem"))
     monkeypatch.setattr(api, "SIGN_PATH", str(tmp_path))
     monkeypatch.setattr(sig, "SIGN_PATH", str(tmp_path))
 
