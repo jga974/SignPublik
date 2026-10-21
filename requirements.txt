@@ -10,4 +10,5 @@ endesive>=2.0.0
 cryptography>=49.0.0
 requests>=2.33.0
 pytest>=9.0.3
-httpx>=0.24.0
+httpx2>=2.16.0
+starlette>=1.7.0
