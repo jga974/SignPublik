@@ -32,6 +32,25 @@ def signature_de_test(tmp_path, monkeypatch):
     sans_horodatage(monkeypatch)
 
 
+def boite_sous_ancre(fichier, largeur=200, hauteur=100, marge=20, recherche="Assistant"):
+    """Cherche l'ancre avec /getInfo-PDF et renvoie (page, boîte de signature) juste en dessous.
+
+    La boîte est en repère PDF (origine en bas à gauche) : (x1, y1, x2, y2).
+    """
+    info = client.post("/getInfo-PDF", headers={"api-key": TEST_API_KEY},
+                       json={"fichier": fichier, "recherche": recherche})
+    assert info.status_code == 200
+    info = info.json()
+    assert info["signature_page"] > 0, f"ancre « {recherche} » introuvable"
+    x1 = float(info["signature_coords"]["x1"])
+    y1 = float(info["signature_coords"]["y1"])      # repère haut-gauche
+    hauteur_page = int(info["pagesize"]["height"])
+    box = (int(x1), int(hauteur_page - y1 - hauteur - marge),
+           int(x1) + largeur, int(hauteur_page - y1 - marge))
+    print(f"ancre en ({x1:.0f}, {y1:.0f}) page {info['signature_page']}, boîte de signature {box}")
+    return info["signature_page"], box
+
+
 def test_PDFInfo():
     headers = {"api-key": TEST_API_KEY}
 
@@ -94,24 +113,13 @@ def test_PDFSign(save_signed):
         "content": base64_encoded
     }
 
-    # 1. on cherche l'ancre : page et position du texte « Assistant »
-    info = client.post("/getInfo-PDF", headers=headers,
-                       json={"fichier": fichier, "recherche": "Assistant"})
-    assert info.status_code == 200
-    info = info.json()
-    assert info["signature_page"] == 2
-    x1 = float(info["signature_coords"]["x1"])
-    y1 = float(info["signature_coords"]["y1"])      # repère haut-gauche
-    hauteur_page = int(info["pagesize"]["height"])
+    # 1. on cherche l'ancre « Assistant » et on place la boîte 20 points dessous
+    page, box = boite_sous_ancre(fichier)
+    assert page == 2
 
-    # 2. la boîte de signature est en repère PDF (origine en bas à gauche) :
-    #    200 x 100 points, 20 points sous l'ancre
-    box = (int(x1), int(hauteur_page - y1 - 120), int(x1) + 200, int(hauteur_page - y1 - 20))
-    print(f"ancre en ({x1:.0f}, {y1:.0f}) page {info['signature_page']}, boîte de signature {box}")
-
-    # 3. on signe à cet endroit
+    # 2. on signe à cet endroit
     payload = {
-        "page": info["signature_page"],
+        "page": page,
         "ocrlayer": False,
         "protect": False,
         "signature_box": ", ".join(map(str, box)),
@@ -125,6 +133,36 @@ def test_PDFSign(save_signed):
     assert response.content.startswith(pdf_data), "le PDF d'origine doit être conservé"
     # pytest test_client.py::test_PDFSign -s --save-signed ./pdf_signes
     save_signed("signed_fichier_demande-testeur-avelin.pdf", response.content)
+
+def test_PDFSignNom(save_signed):
+    """Signature nominative : la griffe est générée à partir du nom du signataire."""
+    headers = {"api-key": TEST_API_KEY}
+
+    with open(FIXTURES / "fichier_demande-testeur-avelin.pdf", "rb") as pdf_file:
+        pdf_data = pdf_file.read()
+    fichier = {
+        "filename": "fichier_demande-testeur-avelin.pdf",
+        "content": base64.b64encode(pdf_data).decode("utf-8")
+    }
+
+    # la griffe nominative fait 226 x 170 : on lui laisse la place sous l'ancre
+    page, box = boite_sous_ancre(fichier, largeur=226, hauteur=170)
+
+    payload = {
+        "page": page,
+        "signername": "Michel Dupont",
+        "signermail": "michel.dupont@ac-corse.fr",
+        "signature_box": ", ".join(map(str, box)),
+        "filedef1": fichier
+    }
+
+    response = client.post(url="/sign-simple-name", json=payload, headers=headers)
+    assert response.status_code == 200
+    assert response.headers['content-type'] == 'application/pdf'
+    assert response.content.startswith(pdf_data), "le PDF d'origine doit être conservé"
+    assert b"/ByteRange" in response.content, "le PDF doit contenir une signature électronique"
+    # pytest test_client.py::test_PDFSignNom -s --save-signed ./pdf_signes
+    save_signed("signed_michel-dupont.pdf", response.content)
 
 # Le signataire
 @pytest.mark.skipif( 1 == 1 , reason="trop lourd a tester l  signature")
