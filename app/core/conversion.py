@@ -6,6 +6,8 @@ import sys, os, io
 import base64
 
 
+import re
+
 def get_pdf_content(filename : str, base64content : str) :
     # on transforme les docx en PDF au besoin
     if filename.endswith('.docx'):
@@ -16,33 +18,41 @@ def get_pdf_content(filename : str, base64content : str) :
         # Utiliser BytesIO pour traiter les octets comme un fichier
         file_stream = io.BytesIO(file_bytes)
 
-        # Enregistrer temporairement le fichier DOCX
-        input_path = f"TEMP_{filename}"
-        with open(input_path, 'wb') as f:
-            f.write(file_stream.getvalue())
+        # Nettoyage strict du nom de fichier pour empêcher tout Path Traversal
+        nom_securise = os.path.basename(filename)
+        nom_securise = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', nom_securise)
+        if not nom_securise.endswith('.docx'):
+            nom_securise += '.docx'
 
-        # Définir le chemin de sortie pour le PDF
-        output_path = filename.replace('.docx', '.pdf')
+        # Enregistrer temporairement le fichier DOCX de manière sécurisée
+        input_path = f"TEMP_{nom_securise}"
+        output_path = nom_securise.replace('.docx', '.pdf')
 
-        # Convertir le fichier DOCX en PDF
-        # SEULEMENT SUR WINDOWS OU MACOS -> convert(input_path, output_path)
-        logger.info(f"Convert du fichier  {input_path} en {output_path}")
-        output_path = convert_to(".", input_path)
+        try:
+            with open(input_path, 'wb') as f:
+                f.write(file_stream.getvalue())
 
-        logger.info(f"on a converti  {filename}")
-        # Lire le fichier PDF généré
-        with open(output_path, 'rb') as pdf_file:
-            pdf_content = pdf_file.read()
-        logger.info(f"on a converti  {filename}")
-        # Supprimer les fichiers temporaires
-        os.remove(input_path)
-        os.remove(output_path)
+            # Convertir le fichier DOCX en PDF
+            logger.info(f"Convert du fichier  {input_path} en {output_path}")
+            converted_name = convert_to(".", input_path)
+
+            logger.info(f"on a converti  {filename}")
+            # Lire le fichier PDF généré
+            with open(converted_name, 'rb') as pdf_file:
+                pdf_content = pdf_file.read()
+            return pdf_content
+        finally:
+            # Nettoyage garanti des fichiers temporaires
+            if os.path.exists(input_path):
+                os.remove(input_path)
+            if os.path.exists(output_path):
+                os.remove(output_path)
     else:
         # on a du PDF
         # Décoder les contenus base64
         pdf_content = base64.b64decode(base64content)
         logger.info(f"n a decode le base 64 de {filename}")
-    return pdf_content
+        return pdf_content
 
 
 def convert_to(folder: str, source: str, timeout: float = None) -> Any:

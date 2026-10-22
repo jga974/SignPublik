@@ -1,11 +1,13 @@
 import datetime
 
-from fastapi import FastAPI, Header, File, UploadFile, HTTPException, Depends
+from fastapi import FastAPI, Header, File, UploadFile, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from fastapi.responses import JSONResponse, Response
 
 import io
 import os
+import shutil
+import secrets
 
 import json
 
@@ -13,11 +15,12 @@ import base64
 from .core.ImageUtils import creer_image_texte_manuscrit_avance
 from .core.utilities import file_chunk_generator
 from .core.logger import logger
-from .core.utilities import get_image_size_in_points, slugify, storeImage
+from .core.utilities import get_image_size_in_points, slugify, storeImage, generate_unique_filename
 from app.core.signature import sign_pdf_content
 from .core.conversion import convert_to, get_pdf_content
 from .core.rib import extract_text_from_pdf_stream, extract_ibans, parse_french_rib
 from .core.constants import SIGN_PATH
+from .core import rate_limiter as rl
 
 from pypdf import PdfReader
 import pymupdf
@@ -27,8 +30,10 @@ from .models.files import (ImageRequest, SignBasePDFRequest, InfoSearchPDFReques
 from app.config import API_KEY, SHARED_SECRET
 
 def verify_api_key(api_key: str = Header(...)):
-    logger.debug(f"header : {api_key}")
-    if api_key != API_KEY:
+    # Masquage de la clé d'API dans les logs pour empêcher toute fuite (VULN-03)
+    logger.debug("Vérification de la clé d'API reçue (longueur: %d)", len(api_key) if api_key else 0)
+    # Comparaison à temps constant contre les attaques temporelles (VULN-04)
+    if not secrets.compare_digest(api_key, API_KEY):
         raise HTTPException(status_code=403, detail="Forbidden - Invalid API Key")
     return api_key
 
@@ -43,20 +48,64 @@ app = FastAPI(root_path="https://projet.ac-corse.fr/api", version="0.3",
 
               )
 
+
+@app.middleware("http")
+async def anti_dos_middleware(request: Request, call_next):
+    """Middleware de protection anti-DDoS / DoS :
+    1. Limitation de taille maximale de corps (Protection OOM / Payload Too Large).
+    2. Limitation de débit (Rate Limiting) par clé d'API ou IP.
+    """
+    # 1. Vérification de la taille déclarée dans Content-Length
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > rl.MAX_UPLOAD_SIZE_BYTES:
+                max_mb = rl.MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)
+                return JSONResponse(
+                    status_code=413,
+                    content={"detail": f"Payload Too Large : la taille maximale autorisée est de {max_mb} Mo."}
+                )
+        except ValueError:
+            return JSONResponse(status_code=400, content={"detail": "En-tête Content-Length invalide"})
+
+    # 2. Identification du client (clé d'API ou IP source)
+    client_key = request.headers.get("api-key") or (request.client.host if request.client else "unknown")
+
+    # 3. Limitation de débit selon le coût CPU de l'endpoint
+    path = request.url.path
+    if path in ("/sign-basePDF64", "/sign-simple-name"):
+        limit = rl.RATE_LIMIT_HEAVY
+    else:
+        limit = rl.RATE_LIMIT_GENERAL
+
+    allowed, retry_after = rl.rate_limiter.is_allowed(client_key, limit=limit, window_seconds=60.0)
+    if not allowed:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": f"Too Many Requests : limite de débit atteinte. Réessayez dans {retry_after} secondes."},
+            headers={"Retry-After": str(retry_after)}
+        )
+
+    return await call_next(request)
+
 @app.get("/hello/{name}")
 async def say_hello(name: str):
     return {"message": f"Hello, {name}!"}
 
 @app.get("/helloSP/{name}")
 async def say_hellosp(name: str, x_api_key: str = Header(...)):
-    if x_api_key != SHARED_SECRET:
+    # Comparaison à temps constant (VULN-04)
+    if not secrets.compare_digest(x_api_key, SHARED_SECRET):
         raise HTTPException(status_code=403, detail="Invalid API Key")
     return {"message": f"Hello,SECURE  {name}!"}
 
 
 @app.post("/image-size/")
-async def get_image_size_and_store(request:  ImageRequest ): # = File(...)):
+async def get_image_size_and_store(request: ImageRequest, api_key: str = Header(None)):
     logger.debug("Paramètres POST : %s", request)
+    # Vérification sécurisée si un en-tête d'authentification est transmis
+    if api_key is not None and not secrets.compare_digest(api_key, API_KEY):
+        raise HTTPException(status_code=403, detail="Forbidden - Invalid API Key")
 
     try:
         width, height =  get_image_size_in_points(request.image.content)
@@ -238,29 +287,33 @@ async def getInfo(file: InfoSearchPDFRequest):
 
 @app.post("/read-rib", dependencies=[Depends(verify_api_key)])
 async def get_rib_information(request: SimplePDFPublik):
-    pdf_bytes = base64.b64decode(request.fichier.content)
+    try:
+        pdf_bytes = base64.b64decode(request.fichier.content)
 
-    # Utiliser BytesIO pour traiter les octets comme un fichier
-    pdf_stream = io.BytesIO(pdf_bytes)
+        # Utiliser BytesIO pour traiter les octets comme un fichier
+        pdf_stream = io.BytesIO(pdf_bytes)
 
-    text = extract_text_from_pdf_stream(pdf_stream)
-    logger.info(f"Text lu")
-    ibans,bics = extract_ibans(text)
-    logger.info(f"BICS {bics}")
+        text = extract_text_from_pdf_stream(pdf_stream)
+        logger.info(f"Text lu")
+        ibans, bics = extract_ibans(text)
+        logger.info(f"BICS {bics}")
 
-    resultats = []
-    for iban in ibans:
-        rib = parse_french_rib(iban) if iban.startswith('FR') else None
-        bic = bics[0] if bics else None
-        #print(f"{iban} -> RIB  : {rib['code_guichet']} {rib['code_banque']}")
-        resultats.append({'iban': iban, 'rib': rib, 'bic': bic})
-    # on envoie que la premiere ligne
-    if ibans :
-        logger.info(f"on retourne {resultats[0]} {resultats[0]['iban']}  {resultats[0].get('rib', 'Inconnu')}****")
-    else:
-        logger.warn(f"pas de données iban trouvées dans le fichier")
+        resultats = []
+        for iban in ibans:
+            rib = parse_french_rib(iban) if iban.startswith('FR') else None
+            bic = bics[0] if bics else None
+            #print(f"{iban} -> RIB  : {rib['code_guichet']} {rib['code_banque']}")
+            resultats.append({'iban': iban, 'rib': rib, 'bic': bic})
+        # on envoie que la premiere ligne
+        if ibans:
+            logger.info(f"on retourne {resultats[0]} {resultats[0]['iban']}  {resultats[0].get('rib', 'Inconnu')}****")
+        else:
+            logger.warning(f"pas de données iban trouvées dans le fichier")
 
-    return resultats[0] if resultats else None
+        return resultats[0] if resultats else None
+    except Exception as e:
+        logger.error(f"Erreur lors de la lecture du RIB : {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Erreur lors de la lecture du RIB: {str(e)}")
 
 
 from app.core.omogen import envoi_tt_pdf_ruda, envoi_pdf_ruda_arretes, supp_doc_ruda
@@ -403,21 +456,37 @@ async def sign_pdf_name_image(request: SignBasePDFRequestName):
                                                               taille_image=(113, 85))
                                                               # OK taille_image=(250, 170))
         """
-        nom_fichier_img = f"{slugify(request.signername)}.png"
+        # Générer un nom unique pour isoler la griffe de cette signature (sécurité concurrence)
+        unique_suffix = generate_unique_filename(extension="png")
+        nom_slugifie = f"{slugify(request.signername)}.png"
+        chemin_unique = os.path.join(SIGN_PATH, f"{slugify(request.signername)}_{unique_suffix}")
+        chemin_canonique = os.path.join(SIGN_PATH, nom_slugifie)
+
         signature_img_file = creer_image_texte_manuscrit_avance(
             texte=request.signername,
             taille_image=(226, 170),
-            nom_fichier=os.path.join(SIGN_PATH, nom_fichier_img),
+            nom_fichier=chemin_unique,
             horodatage=datetime.datetime.now().strftime("le %d/%m/%Y à %Hh%M:%S")
         )
+        try:
+            shutil.copyfile(chemin_unique, chemin_canonique)
+        except Exception as e:
+            logger.debug(f"Copie canonique ignoree: {e}")
 
         logger.info(f"on signe avec page : {page_a_signer}  et {box_tuple} et image {signature_img_file}")
 
-        # la signature  electronique du flux PDF
-        fichier_signe = sign_pdf_content(pdf_content, box_tuple,
-                                         page_a_signer,
-                                         signature_img_file,
-                                         mail_signer = request.signermail)
+        try:
+            # la signature  electronique du flux PDF
+            fichier_signe = sign_pdf_content(pdf_content, box_tuple,
+                                             page_a_signer,
+                                             signature_img_file,
+                                             mail_signer = request.signermail)
+        finally:
+            if os.path.exists(chemin_unique):
+                try:
+                    os.remove(chemin_unique)
+                except Exception:
+                    pass
 
         logger.debug(f"on retourne la réponse {fichier_signe}")
 
@@ -439,41 +508,8 @@ async def sign_pdf_base64_ok(request: SignBasePDFRequest):
     try:
         logger.info(f"Traitement du fichier  {request.filedef1.filename}")
 
-        # on transforme les docx en PDF
-        if request.filedef1.filename.endswith('.docx'):
-            logger.info(f"fichier DOCX, on transforme  {request.filedef1.filename}")
-            # Décoder le contenu du fichier (supposé être en base64)
-            file_bytes = base64.b64decode(request.filedef1.content)
-
-            # Utiliser BytesIO pour traiter les octets comme un fichier
-            file_stream = io.BytesIO(file_bytes)
-
-            # Enregistrer temporairement le fichier DOCX
-            input_path = f"TEMP_{request.filedef1.filename}"
-            with open(input_path, 'wb') as f:
-                f.write(file_stream.getvalue())
-
-            # Définir le chemin de sortie pour le PDF
-            output_path = request.filedef1.filename.replace('.docx', '.pdf')
-
-            # Convertir le fichier DOCX en PDF
-            # SEULEMENT SUR WINDOWS OU MACOS -> convert(input_path, output_path)
-            logger.info(f"Convert du fichier  {input_path} en {output_path}")
-            output_path = convert_to(".", input_path)
-
-            logger.info(f"on a converti  {request.filedef1.filename}")
-            # Lire le fichier PDF généré
-            with open(output_path, 'rb') as pdf_file:
-                pdf_content = pdf_file.read()
-            logger.info(f"on a converti  {request.filedef1.filename}")
-            # Supprimer les fichiers temporaires
-            os.remove(input_path)
-            os.remove(output_path)
-        else:
-            # on a du PDF
-            # Décoder les contenus base64
-            pdf_content = base64.b64decode(request.filedef1.content)
-            print("on a decode le base 64")
+        # Récupération sécurisée du contenu PDF (avec conversion si DOCX)
+        pdf_content = get_pdf_content(request.filedef1.filename, request.filedef1.content)
 
         try:
             # emplacement de la signature : transfo de string a tuple

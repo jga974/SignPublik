@@ -236,3 +236,115 @@ def test_RIBlecture():
     assert response.json()['iban'] == 'FR7630003004170005607498316';
     assert response.json()['rib']['code_banque'] == '30003';
 
+
+def signer_pdf_avec_ancre(
+    chemin_pdf: str | Path,
+    ancre: str,
+    nom_signataire: str,
+    email_signataire: str = "jean.dupont@ac-corse.fr",
+    largeur_griffe: int = 226,
+    hauteur_griffe: int = 170,
+    marge: int = 20,
+    chemin_sortie: str | Path | None = None
+) -> bytes:
+    """Enchaîne les deux opérations :
+    1. /getInfo-PDF : recherche l'ancre et calcule la boîte de signature juste en dessous
+    2. /sign-simple-name : génère la griffe manuscrite depuis le texte et signe électroniquement le PDF.
+    """
+    chemin = Path(chemin_pdf)
+    if not chemin.exists():
+        raise FileNotFoundError(f"Fichier introuvable : {chemin}")
+
+    pdf_bytes = chemin.read_bytes()
+    fichier = {
+        "filename": chemin.name,
+        "content": base64.b64encode(pdf_bytes).decode("utf-8")
+    }
+
+    # 1. Localisation de l'ancre et calcul de la boîte sous l'ancre
+    print(f"\n[1/2] Recherche de l'ancre « {ancre} » dans {chemin.name}...")
+    page, box = boite_sous_ancre(
+        fichier,
+        largeur=largeur_griffe,
+        hauteur=hauteur_griffe,
+        marge=marge,
+        recherche=ancre
+    )
+    print(f"      -> Ancre trouvée à la page {page}, boîte sous l'ancre : {box}")
+
+    # 2. Signature nominative (génération de la griffe texte + signature cryptographique)
+    print(f"[2/2] Signature avec la griffe générée pour « {nom_signataire} »...")
+    payload = {
+        "page": page,
+        "signername": nom_signataire,
+        "signermail": email_signataire,
+        "signature_box": ", ".join(map(str, box)),
+        "filedef1": fichier
+    }
+
+    response = client.post("/sign-simple-name", json=payload, headers={"api-key": TEST_API_KEY})
+    if response.status_code != 200:
+        raise RuntimeError(f"Échec de la signature ({response.status_code}): {response.text}")
+
+    signed_bytes = response.content
+    print(f"      -> PDF signé avec succès ({len(signed_bytes)} octets)")
+
+    if chemin_sortie:
+        sortie = Path(chemin_sortie)
+        sortie.parent.mkdir(parents=True, exist_ok=True)
+        sortie.write_bytes(signed_bytes)
+        print(f"      -> Fichier sauvegardé sous : {sortie.resolve()}")
+
+    return signed_bytes
+
+
+def test_chaine_ancre_et_signature_nominative(save_signed):
+    """Test pytest : vérifie l'enchaînement ancre -> signature nominative."""
+    pdf_path = FIXTURES / "fichier_demande-testeur-avelin.pdf"
+    signed_bytes = signer_pdf_avec_ancre(
+        chemin_pdf=pdf_path,
+        ancre="Assistant",
+        nom_signataire="Michel Dupont",
+        email_signataire="michel.dupont@ac-corse.fr"
+    )
+    assert signed_bytes.startswith(pdf_path.read_bytes())
+    assert b"/ByteRange" in signed_bytes
+    save_signed("signed_chaine_michel_dupont.pdf", signed_bytes)
+
+
+if __name__ == "__main__":
+    import tempfile
+    import app.hello_test as api
+    import app.core.signature as sig
+    import app.core.ImageUtils as imgutils
+
+    print("=== Exécution autonome du script d'enchaînement ===")
+    tmp = Path(tempfile.mkdtemp())
+    if (FIXTURES / "signature_signe_noBG.png").exists():
+        shutil.copy(FIXTURES / "signature_signe_noBG.png", tmp)
+    api.SIGN_PATH = str(tmp)
+    sig.SIGN_PATH = str(tmp)
+    imgutils.SIGN_PATH = str(tmp)
+    sig.DEFAULT_CERT_FILE = str(FIXTURES / "cert.pem")
+    sig.DEFAULT_KEY_FILE = str(FIXTURES / "private_key.pem")
+
+    # Désactiver l'horodatage réseau externe pour exécution locale rapide
+    real_sign = sig.pdf.cms.sign
+    def sign_sans_tsa(data, udct, *args, **kwargs):
+        udct = {k: v for k, v in udct.items() if not k.startswith("timestamp")}
+        return real_sign(data, udct, *args, **kwargs)
+    sig.pdf.cms.sign = sign_sans_tsa
+
+    fichier_source = FIXTURES / "fichier_demande-testeur-avelin.pdf"
+    fichier_sortie = Path(__file__).parent / "pdf_signes" / "test_chaine_resultat.pdf"
+
+    signer_pdf_avec_ancre(
+        chemin_pdf=fichier_source,
+        ancre="Assistant",
+        nom_signataire="Jean Dupont",
+        email_signataire="jean.dupont@ac-corse.fr",
+        chemin_sortie=fichier_sortie
+    )
+    print("=== Terminé avec succès ! ===")
+
+

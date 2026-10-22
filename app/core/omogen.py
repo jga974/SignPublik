@@ -1,6 +1,7 @@
 import requests
 import json
 from app.config import OMOGEN_SECRET_KEY
+from app.core.logger import logger
 
 SECRET_KEY = OMOGEN_SECRET_KEY
 
@@ -88,9 +89,8 @@ def supp_doc_ruda(uid):
     }
 
     url = f"https://pr-api.omogen.in.phm.education.gouv.fr/mesirh/ged-ruda/documents/{uid}/purge"
-    response = requests.delete(url, headers=headers)
-    print("Statut:", response.status_code)
-    print("Réponse:", response.text)
+    response = requests.delete(url, headers=headers, timeout=30.0)
+    logger.info("Statut suppression RUDA %s: %s", uid, response.status_code)
     return response
 
 
@@ -129,9 +129,8 @@ def  _envoyer_pdf_ruda(
     }
 
     try:
-        response = requests.post(url, headers=headers, files=files)
-        print("Statut:", response.status_code)
-        print("Réponse:", response.text)
+        response = requests.post(url, headers=headers, files=files, timeout=60.0)
+        logger.info("Statut envoi RUDA numen %s: %s", numen, response.status_code)
         return response
     finally:
         files["fichier"].close()  # Toujours fermer le fichier ouvert

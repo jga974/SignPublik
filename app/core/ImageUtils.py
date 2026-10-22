@@ -189,8 +189,15 @@ def creer_image_texte_manuscrit(texte, taille_image, nom_fichier="texte_manuscri
     couleur_texte = (50, 50, 50)  # Gris foncé pour un effet plus naturel
     draw.text((x, y), texte, font=police, fill=couleur_texte)
 
-    # Sauvegarder l'image
-    image.save(nom_fichier, 'PNG')
+    # Sauvegarder l'image de manière atomique (évite les corruptions en concurrence)
+    import random
+    temp_nom = f"{nom_fichier}.tmp_{os.getpid()}_{random.randint(1000, 9999)}"
+    try:
+        image.save(temp_nom, 'PNG')
+        os.replace(temp_nom, nom_fichier)
+    except Exception:
+        # Fallback si le système de fichiers refuse le renommage atomique
+        image.save(nom_fichier, 'PNG')
     print(f"Image créée avec succès: {nom_fichier}")
 
     return nom_fichier
@@ -222,9 +229,6 @@ def creer_image_texte_manuscrit_avance(texte, taille_image, nom_fichier="texte_m
     dossier = os.path.dirname(nom_fichier)
     if dossier:
         os.makedirs(dossier, exist_ok=True)
-
-    if os.path.exists(nom_fichier):
-        os.remove(nom_fichier)
 
     largeur, hauteur = taille_image
     image = Image.new('RGBA', (largeur, hauteur), color=couleur_fond)
@@ -327,8 +331,15 @@ def creer_image_texte_manuscrit_avance(texte, taille_image, nom_fichier="texte_m
         draw.text((x, y), horodatage, font=police, fill=couleur_texte)
 
 
-    # Sauvegarder l'image
-    image.save(nom_fichier, 'PNG')
+    # Sauvegarder l'image de manière atomique (évite les corruptions en concurrence)
+    import random
+    temp_nom = f"{nom_fichier}.tmp_{os.getpid()}_{random.randint(1000, 9999)}"
+    try:
+        image.save(temp_nom, 'PNG')
+        os.replace(temp_nom, nom_fichier)
+    except Exception:
+        # Fallback si le système de fichiers refuse le renommage atomique
+        image.save(nom_fichier, 'PNG')
     print(f"Image créée avec succès: {nom_fichier}")
 
     return nom_fichier

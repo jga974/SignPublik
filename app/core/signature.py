@@ -132,6 +132,6 @@ def sign_pdf_content(pdf_content, signature_box, page,
     except Exception as e:
         exc_type, exc_obj, exc_tb = sys.exc_info()
         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        logger.error(exc_type, fname, exc_tb.tb_lineno)
+        logger.error(f"Exception {exc_type} dans {fname}:{exc_tb.tb_lineno} : {e}")
         logger.error(f"Erreur lors de la signature du pdf_content .. : {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Erreur lors de la signature: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Erreur lors de la signature: {str(e)}")

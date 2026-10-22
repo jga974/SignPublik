@@ -26,3 +26,11 @@ def save_signed(request):
         return chemin
 
     return save
+
+
+@pytest.fixture(autouse=True)
+def disable_rate_limiting_during_tests(monkeypatch):
+    """Désactive le rate limiting par défaut pendant les tests unitaires pour éviter les faux positifs."""
+    import app.core.rate_limiter as rl
+    monkeypatch.setattr(rl, "RATE_LIMIT_ENABLED", False)
+

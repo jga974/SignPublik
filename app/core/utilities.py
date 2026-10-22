@@ -55,18 +55,31 @@ def trouver_nom_disponible(path, nom_base, extension):
 def storeImage(b64img : str, filename : str) :
     nom_final = filename
     try:
+        # Nettoyage strict anti Path Traversal
+        nom_propre = os.path.basename(filename)
+        # Supprimer caractères dangereux ou de contrôle
+        nom_propre = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', nom_propre)
+        if not nom_propre or nom_propre.startswith('.'):
+            nom_propre = f"img_{generate_unique_filename(extension='png')}"
+
+        nom, extension = os.path.splitext(nom_propre)
+        if extension.lower() not in ('.png', '.jpg', '.jpeg', '.webp'):
+            extension = '.png'
+            nom_propre = f"{nom}{extension}"
+
+        nom_final = nom_propre
+        target_dir = os.path.abspath(app.core.constants.SIGN_PATH)
+        chemin_complet = os.path.abspath(os.path.join(target_dir, nom_final))
+
+        # Vérification formelle du confinement dans SIGN_PATH
+        if not (chemin_complet == target_dir or chemin_complet.startswith(target_dir + os.sep)):
+            logger.error(f"Tentative de Path Traversal bloquée pour le fichier : {filename}")
+            return False
+
         # Décoder les données Base64
         img_binaire = base64.b64decode(b64img)
 
-        # on verifie l'existence ou pas
-        nom, extension = os.path.splitext(filename)
-
-        nom_final = filename
-        # a utiliser si on ne veut pas ecraser
-        # nom_final =trouver_nom_disponible(core.constants.SIGN_PATH, nom, extension))
-
         # Sauvegarder les données dans un fichier
-        chemin_complet = os.path.join(app.core.constants.SIGN_PATH, nom_final)
         with open(chemin_complet, "wb") as fichier:
             fichier.write(img_binaire)
 

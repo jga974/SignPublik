@@ -69,7 +69,7 @@ Accès à la documentation interactive Swagger : `http://localhost:8000/docs`.
 
 ### En production (Systemd + Apache Reverse Proxy)
 
-Voir la configuration de service systemd :
+Voir la configuration de service systemd (avec 4 workers Uvicorn pour absorber la charge CPU) :
 
 ```ini
 [Unit]
@@ -79,11 +79,23 @@ After=network.target
 [Service]
 User=apache
 WorkingDirectory=/opt/flask
-ExecStart=/opt/flask/env/bin/uvicorn app.hello_test:app --host 127.0.0.1 --port 8000
+ExecStart=/opt/flask/env/bin/uvicorn app.hello_test:app --host 127.0.0.1 --port 8000 --workers 4
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
+```
+
+Directives recommandées pour le Reverse-Proxy Apache (Protection anti-DDoS / Payload Limit) :
+```apache
+# Limite la taille maximale des requêtes à 25 Mo (anti-OOM / DoS)
+LimitRequestBody 26214400
+
+# Timeout de passerelle
+ProxyTimeout 60
+ProxyPreserveHost On
+ProxyPass / http://127.0.0.1:8000/
+ProxyPassReverse / http://127.0.0.1:8000/
 ```
 
 ---
