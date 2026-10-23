@@ -99,3 +99,18 @@ WantedBy=multi-user.target
 | `POST` | `/send-ruda-pdf-arrete` | Transfère un arrêté signé vers la GED OMOGEN |
 | `POST` | `/send-ruda` | Transfère une demande de télétravail vers OMOGEN |
 | `DELETE`| `/delete-ruda/{uuid}` | Supprime/purge un document de la GED RUDA |
+
+## Signer un PDF en ligne de commande
+
+`scripts/signer_pdf.py` signe un PDF (ou DOCX) sous un texte d'ancrage, avec une griffe manuscrite
+générée à partir d'un nom. Il utilise uniquement les API du service (`/getInfo-PDF` puis `/sign-simple-name`).
+
+```bash
+export API_KEY=...                      # clé API du service
+python scripts/signer_pdf.py contrat.pdf --nom "Michel Dupont" --ancre "Assistant"
+# -> signed_contrat.pdf
+```
+
+Options : `--url` (ou `$SIGNPUBLIK_URL`, défaut `http://localhost:8000`), `--sortie`, `--mail` (utilise le
+certificat de ce signataire s'il existe sur le serveur), `--largeur`/`--hauteur`/`--marge` de la zone de
+signature en points. Si la place manque sous l'ancre, la signature est posée au-dessus.
