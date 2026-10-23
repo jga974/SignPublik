@@ -59,6 +59,7 @@ def sign_pdf_content(pdf_content, signature_box, page,
                 cert_data = f.read()
         except FileNotFoundError:
             logger.error(f"Le fichier {cert_file} n'existe pas.")
+            raise
         cert = x509.load_pem_x509_certificate(cert_data, default_backend())
 
         try:
@@ -66,6 +67,7 @@ def sign_pdf_content(pdf_content, signature_box, page,
                 key = load_pem_private_key(f.read(), password=None, backend=default_backend())
         except FileNotFoundError:
             logger.error(f"Le fichier {key_file} n'existe pas.")
+            raise
 
         othercerts = []  # Certificats intermédiaires si nécessaire
 
@@ -132,6 +134,6 @@ def sign_pdf_content(pdf_content, signature_box, page,
     except Exception as e:
         exc_type, exc_obj, exc_tb = sys.exc_info()
         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        logger.error(exc_type, fname, exc_tb.tb_lineno)
+        logger.error(f"{exc_type.__name__} dans {fname} ligne {exc_tb.tb_lineno}")
         logger.error(f"Erreur lors de la signature du pdf_content .. : {str(e)}")
         raise HTTPException(status_code=500, detail=f"Erreur lors de la signature: {str(e)}")

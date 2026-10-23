@@ -131,17 +131,6 @@ def test_page_zero_ou_negative_signe_la_premiere(client, headers, sign_env):
         assert len(sig_widgets(signed, 1)) == 0
 
 
-def test_boite_invalide_utilise_la_boite_par_defaut(client, headers, sign_env):
-    """Une boîte illisible retombe sur (350, 120, 550, 220)."""
-    pdf = make_pdf()
-    p = payload_base(pdf)
-    p["signature_box"] = "pas, une, boite"
-    r = client.post("/sign-basePDF64", headers=headers, json=p)
-    assert r.status_code == 200
-    rect = [round(float(v)) for v in sig_widgets(r.content, 0)[0]["/Rect"]]
-    assert rect == [350, 120, 550, 220]
-
-
 def test_boite_par_defaut_du_modele(client, headers, sign_env):
     """Sans signature_box, le modèle fournit « 350, 120, 550, 220 »."""
     p = payload_base(make_pdf())
@@ -151,13 +140,13 @@ def test_boite_par_defaut_du_modele(client, headers, sign_env):
     assert [round(float(v)) for v in sig_widgets(r.content, 0)[0]["/Rect"]] == list(BOX)
 
 
-def test_boite_avec_espaces_et_decimaux_refuse_les_decimaux(client, headers, sign_env):
-    """int('350.5') échoue : on retombe sur la boîte par défaut plutôt que de planter."""
+def test_boite_avec_espaces_et_decimaux(client, headers, sign_env):
+    """Espaces tolérés ; les décimales (comme celles de /getInfo-PDF) sont arrondies."""
     p = payload_base(make_pdf())
-    p["signature_box"] = "  100 , 100 ,300.5, 200 "
+    p["signature_box"] = "  100 , 100.4 ,300.5, 200 "
     r = client.post("/sign-basePDF64", headers=headers, json=p)
     assert r.status_code == 200
-    assert [round(float(v)) for v in sig_widgets(r.content, 0)[0]["/Rect"]] == list(BOX)
+    assert [round(float(v)) for v in sig_widgets(r.content, 0)[0]["/Rect"]] == [100, 100, 300, 200]
 
 
 # ---------- erreurs ----------
@@ -292,7 +281,7 @@ def test_signature_sous_l_ancre(client, headers, sign_env, anchor_page):
 def test_signature_nominative_sous_l_ancre(client, headers, sign_env):
     pdf = make_pdf()
     info = locate_anchor(client, headers, pdf)
-    box = box_under_anchor(info, largeur=226, hauteur=170)
+    box = box_under_anchor(info, largeur=130, hauteur=100)
     signed = sign_nom(client, headers, pdf, box=box, page=info["signature_page"]).content
     assert len(sig_widgets(signed, 1)) == 1
     assert pixels_changed(pdf, signed, 1, to_rect(box)) > 0.01

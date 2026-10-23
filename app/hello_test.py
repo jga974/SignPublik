@@ -18,6 +18,7 @@ from app.core.signature import sign_pdf_content
 from .core.conversion import convert_to, get_pdf_content
 from .core.rib import extract_text_from_pdf_stream, extract_ibans, parse_french_rib
 from .core.constants import SIGN_PATH
+from .core.signature_box import SignatureBoxError, resolve_signature_location
 
 from pypdf import PdfReader
 import pymupdf
@@ -380,20 +381,8 @@ async def sign_pdf_name_image(request: SignBasePDFRequestName):
 
         pdf_content = get_pdf_content(request.filedef1.filename, request.filedef1.content)
 
-        try:
-            # emplacement de la signature : transfo de string a tuple
-            box_tuple = tuple(int(val.strip()) for val in request.signature_box.split(','))
-        except ValueError:
-            logger.info(f"Erreur conversion signax_box valeur par defaut de box_tuple pour {request.signature_box}")
-            box_tuple = (350, 120, 550, 220)  # (120, 520, 20, 300)
-
-        try:
-            # Convertir la chaîne en entier le maximum entre le nombre et 0
-            page_a_signer = max(int(request.page) - 1, 0)
-        except ValueError:
-            logger.info(f"valeur par defaut de page a signer {request.page}")
-            #  premiere page 0 si la conversion échoue
-            page_a_signer = 0
+        # emplacement de la signature : boîte et page validées par rapport au PDF
+        box_tuple, page_a_signer = resolve_signature_location(pdf_content, request.signature_box, request.page)
 
         # le fichier signature PNG
         """ ancienne version 
@@ -428,6 +417,8 @@ async def sign_pdf_name_image(request: SignBasePDFRequestName):
             headers={"Content-Disposition": f"attachment; filename=signed_{request.filedef1.filename}"}
         )
 
+    except SignatureBoxError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erreur lors de la signature SIMPLE: {str(e)}")
 
@@ -475,21 +466,8 @@ async def sign_pdf_base64_ok(request: SignBasePDFRequest):
             pdf_content = base64.b64decode(request.filedef1.content)
             print("on a decode le base 64")
 
-        try:
-            # emplacement de la signature : transfo de string a tuple
-            box_tuple = tuple(int(val.strip()) for val in request.signature_box.split(','))
-        except ValueError:
-            logger.info(f"Erreur conversion signax_box valeur par defaut de box_tuple pour {request.signature_box}")
-            box_tuple = (350, 120, 550, 220) #(120, 520, 20, 300)
-
-        
-        try:
-            # Convertir la chaîne en entier le maximum entre le nombre et 0
-            page_a_signer = max(int(request.page) - 1, 0)
-        except ValueError:
-            logger.info(f"valeur par defaut de page a signer {request.page}")
-            #  premiere page 0 si la conversion échoue
-            page_a_signer = 0
+        # emplacement de la signature : boîte et page validées par rapport au PDF
+        box_tuple, page_a_signer = resolve_signature_location(pdf_content, request.signature_box, request.page)
 
         # le fichier signature PNG
         signature_img_file = os.path.join(SIGN_PATH, "signature_signe_noBG.png")
@@ -508,6 +486,8 @@ async def sign_pdf_base64_ok(request: SignBasePDFRequest):
             headers={"Content-Disposition": f"attachment; filename=signed_{request.filedef1.filename}"}
         )
 
+    except SignatureBoxError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erreur lors de la signature: {str(e)}")
 
